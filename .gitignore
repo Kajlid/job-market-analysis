@@ -1,7 +1,15 @@
+/.bsp/
+target/
+.metals/
+.idea/
+.vscode/
+.DS_Store
+
 *.class
 *.log
 .env
 data/
+*.db
 
 *.json
 
