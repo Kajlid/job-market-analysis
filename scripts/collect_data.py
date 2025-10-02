@@ -25,21 +25,6 @@ with open("data/data.json", "w") as f:       # local version
     json.dump(data, f)
     
 print("Saved", len(data), "records to data.json")
-    
-# client = InsecureClient('http://localhost:9870')
-# client.makedirs(hdfs_dir)
-    
-# client.write(hdfs_path, data=json.dumps(data), encoding='utf-8', overwrite=True)
-    
-# print(f"Snapshot stored in HDFS: {hdfs_path}")
-
-
-# print(client.list(hdfs_dir))
-
-# # Read the file
-# with client.read(hdfs_path, encoding='utf-8') as reader:
-#     print(reader.read())
-
 
 subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
 
