@@ -1,8 +1,15 @@
 /.bsp/
-target/
+**/target/
 .metals/
+*.bloop
+.bloop/
+*.crc
 .idea/
 .vscode/
+**/semanticdb/
+**/SUCCESS.src
+_SUCCESS
+**/*.bin
 .DS_Store
 
 *.class
