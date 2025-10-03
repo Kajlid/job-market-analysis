@@ -15,4 +15,10 @@ lazy val root = (project in file("."))
     )
   )
 
+fork := true
+
+javaOptions ++= Seq(
+  "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"       // this tells the JVM to open the sun.nio.ch package to Spark at runtime (avoid error).
+)
+
 // See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html for instructions on how to publish to Sonatype.
