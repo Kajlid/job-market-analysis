@@ -24,3 +24,4 @@ data/
 hs_err_pid*
 
 archive.zip
+.venv/

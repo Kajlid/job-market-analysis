@@ -18,6 +18,7 @@ lazy val root = (project in file("."))
 fork := true
 
 javaOptions ++= Seq(
+  "-Xmx4G", // Set 4GB heap size (adjust as needed)
   "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"       // this tells the JVM to open the sun.nio.ch package to Spark at runtime (avoid error).
 )
 
