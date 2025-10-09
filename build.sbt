@@ -1,6 +1,7 @@
 import Dependencies._
 
-ThisBuild / scalaVersion     := "2.13.16"
+// ThisBuild / scalaVersion     := "2.13.16"
+ThisBuild / scalaVersion     := "2.12.15"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "com.example"
 ThisBuild / organizationName := "example"
@@ -8,11 +9,13 @@ ThisBuild / organizationName := "example"
 lazy val root = (project in file("."))
   .settings(
     name := "job-market-analysis",
-    libraryDependencies ++= Seq(
+    libraryDependencies ++= Seq(  
       Dependencies.munit % Test,
-      "org.apache.spark" %% "spark-core" % "3.5.1",
-      "org.apache.spark" %% "spark-sql"  % "3.5.1"
-    )
+      "org.apache.spark" %% "spark-core" % "3.4.1",
+      "org.apache.spark" %% "spark-sql"  % "3.4.1",
+      "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.2"
+    ),
+    resolvers += "John Snow Labs" at "https://repo.johnsnowlabs.com/public"
   )
 
 fork := true

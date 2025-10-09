@@ -26,6 +26,7 @@ cd job-market-analysis
 2. Set up dependencies
 Fetch dependencies and set up the project with sbt:
 ```bash
+sbt reload
 sbt update
 ```
 
