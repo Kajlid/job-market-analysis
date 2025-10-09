@@ -1,7 +1,7 @@
 import Dependencies._
 
 // ThisBuild / scalaVersion     := "2.13.16"
-ThisBuild / scalaVersion     := "2.12.15"
+ThisBuild / scalaVersion     := "2.12.17"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "com.example"
 ThisBuild / organizationName := "example"
@@ -13,6 +13,7 @@ lazy val root = (project in file("."))
       Dependencies.munit % Test,
       "org.apache.spark" %% "spark-core" % "3.4.1",
       "org.apache.spark" %% "spark-sql"  % "3.4.1",
+      "org.apache.spark" %% "spark-mllib" % "3.4.1",
       "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.2"
     ),
     resolvers += "John Snow Labs" at "https://repo.johnsnowlabs.com/public"
