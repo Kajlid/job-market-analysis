@@ -14,7 +14,7 @@ lazy val root = (project in file("."))
       "org.apache.spark" %% "spark-core" % "3.4.1",
       "org.apache.spark" %% "spark-sql"  % "3.4.1",
       "org.apache.spark" %% "spark-mllib" % "3.4.1",
-      "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.2"
+      "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.5"
     ),
     resolvers += "John Snow Labs" at "https://repo.johnsnowlabs.com/public"
   )

@@ -1,5 +1,6 @@
 package com.example.scalaspark
 import com.example.scalaspark.Analysis.calculateAverageNumberOfVacancies
+import com.example.scalaspark.Analysis.clusterJobAds
 
 object SparkMain extends App {
     val spark = createSparkSession("DF", isLocal = true)
@@ -7,9 +8,11 @@ object SparkMain extends App {
 
     val data = spark.read.json(path)
 
-    val analysisResult = calculateAverageNumberOfVacancies(data = data)
+    // val analysisResult = calculateAverageNumberOfVacancies(data = data)
 
-    analysisResult.show(truncate = false)
+    // analysisResult.show(truncate = false)
+
+    val clusterResult = clusterJobAds(data = data)
 
     spark.stop()
 
