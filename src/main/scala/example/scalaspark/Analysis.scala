@@ -58,7 +58,7 @@ object Analysis {
             .trim                 // remove leading and trailing whitespace
     })
 
-    val cleanedData = withText.withColumn("cleaned_combined_text", cleanTextUDF(col("combined_text")))
+    val cleanedData = combinedData.withColumn("cleaned_combined_text", cleanTextUDF(col("combined_text")))
 
     // Document Assembler
     val documentAssembler = new DocumentAssembler()
@@ -149,9 +149,9 @@ object Analysis {
 
     finalDF.write.mode("overwrite").option("header", "true").csv("output/job_clusters")
 
-    val scoresDF = silhouetteScores.toSeq.toDF("k", "silhouette")
-    scoresDF.write.mode("overwrite").option("header", "true").csv("output/job_clusters_silhouette")
+    // val scoresDF = spark.createDataFrame(silhouetteScores.toSeq).toDF("k", "silhouette")
+    // scoresDF.write.mode("overwrite").option("header", "true").csv("output/job_clusters_silhouette")
 
-    (finalDF, silhouetteScores.toSeq)
+    finalDF
   }
 }
