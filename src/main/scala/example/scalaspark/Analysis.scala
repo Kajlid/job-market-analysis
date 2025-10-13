@@ -29,6 +29,7 @@ object Analysis {
     sortedResult
   }
 
+
   def clusterJobAds(
     /* 
     Cluster job ads with k-means and using PCA dimensionality reduction for better analysis and visualization:
@@ -39,7 +40,8 @@ object Analysis {
     kRange: Range = 2 to 10,   // numbers of clusters to test
     numComponents: Int = 50,   // pca number of components k
     ): DataFrame = {
-    // text fields needed for clustering combined as only one column (with spaces in between)
+
+    // Text fields needed for clustering combined as only one column (with spaces in between)
       val combinedData = if (textCols.length > 1) {
       val combinedCol = concat_ws(" ", textCols.map(col): _*)
       data.withColumn("combined_text", combinedCol)
@@ -47,9 +49,20 @@ object Analysis {
           data.withColumn("combined_text", col(textCols.head))
         }
 
+    // Pre-processing and cleaning
+    val cleanTextUDF = udf((text: String) => {
+    if (text == null) "" 
+    else text.toLowerCase
+            .replaceAll("\\p{Punct}", " ")    // replace punctuation with whitespace (in scala, \ itself needs to be escaped with \)
+            .replaceAll("\\s+", " ")          // replace many whitespaces with just one whitespace
+            .trim                 // remove leading and trailing whitespace
+    })
+
+    val cleanedData = withText.withColumn("cleaned_combined_text", cleanTextUDF(col("combined_text")))
+
     // Document Assembler
     val documentAssembler = new DocumentAssembler()
-      .setInputCol("combined_text")
+      .setInputCol("cleaned_combined_text")
       .setOutputCol("document")
 
     val tokenizer = new Tokenizer() 
@@ -57,6 +70,7 @@ object Analysis {
       .setOutputCol("token")
 
     // Embeddings (XlmRoBerta is used because of multilingual support)
+    // Consider SentenceEmbeddings layer on top of token embeddings to reduce downstream size.
     val embeddings = XlmRoBertaEmbeddings.pretrained("xlm_v_base","xx")     // xx for multilingual
     .setInputCols(Array("document", "token")) 
     .setOutputCol("embeddings") 
@@ -75,18 +89,26 @@ object Analysis {
       embeddingsFinisher
     ))
 
-    val dataWithEmbeddings = pipeline.fit(combinedData).transform(combinedData)
+    val dataWithEmbeddings = pipeline.fit(cleanedData).transform(cleanedData)
     
     // val dataWithFeatures = dataWithEmbeddings.withColumn("features", vecify(col("finished_embeddings"))).na.drop(Seq("features"))
 
     // L2-normalization, essentially for removing effect of total word count
-    val normalizer = new Normalizer().setInputCol("finished_embeddings").setOutputCol("features").setP(2.0)
+    val normalizer = new Normalizer()
+    .setInputCol("finished_embeddings")
+    .setOutputCol("features")
+    .setP(2.0)
 
     val normalizedDF = normalizer.transform(dataWithEmbeddings)
 
     // PCA reduce dimensionality
-    val pcaModel = new PCA().setInputCol("features").setOutputCol("pcaFeatures").setK(numComponents).fit(normalizedDF)
-    val pcaDF = pcaModel.transform(normalizedDF).select(col("*"))
+    val pcaModel = new PCA()
+    .setInputCol("features")
+    .setOutputCol("pcaFeatures")
+    .setK(numComponents)
+    .fit(normalizedDF)
+
+    val pcaDF = pcaModel.transform(normalizedDF)
 
     // cache because we'll train more KMeans models (speed up repeated access to intermediate data)
     pcaDF.cache()
@@ -100,6 +122,7 @@ object Analysis {
     var bestK = kRange.head        // start with setting number of clusters to 2
     var bestScore = Double.NegativeInfinity     // this will be replaced by new best score
     var bestModel: KMeansModel = null
+    val silhouetteScores = scala.collection.mutable.ArrayBuffer[(Int, Double)]()    // for storing progress
 
     for (k <- kRange) {
       val kmeans = new KMeans()
@@ -113,6 +136,7 @@ object Analysis {
       val model = kmeans.fit(pcaDF)
       val preds = model.transform(pcaDF)
       val score = evaluator.evaluate(preds)
+      silhouetteScores += ((k, score))
       if (score > bestScore) {     // update best model (optimal number of clusters)
         bestScore = score
         bestK = k
@@ -120,11 +144,14 @@ object Analysis {
       }
     }
 
-    // final predictions with best model after the iteration
+    // Final clustering with best model after the iteration
     val finalDF = bestModel.transform(pcaDF).withColumnRenamed("prediction", "clusterNumber") 
 
-    finalDF.write.option("header", "true").csv("output/job_clusters")
+    finalDF.write.mode("overwrite").option("header", "true").csv("output/job_clusters")
 
-    finalDF
+    val scoresDF = silhouetteScores.toSeq.toDF("k", "silhouette")
+    scoresDF.write.mode("overwrite").option("header", "true").csv("output/job_clusters_silhouette")
+
+    (finalDF, silhouetteScores.toSeq)
   }
 }
