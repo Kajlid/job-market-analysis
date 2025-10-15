@@ -59,7 +59,7 @@ object JobAdsReader {
 
     // 7️⃣ Show example of cleaned keywords
     dfKeywords.select("id", "filtered_words")
-      .show(, truncate = false)
+      .show(1, truncate = false)
 
     spark.stop()
   }
