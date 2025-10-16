@@ -26,6 +26,8 @@ spark = SparkSession.builder \
     .config("spark.driver.memory", "8g") \
     .config("spark.executor.memory", "8g") \
     .config("spark.sql.files.maxPartitionBytes", "128MB") \
+    .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
+    .config("spark.mongodb.write.connection.uri", mongo_uri) \
     .getOrCreate()
 
 # Load your JSON data (from HDFS or local)
@@ -42,7 +44,14 @@ def calculate_avg_vacancies(dataframe):
         .sort(col("num_vacancies_per_municipality").desc())
 
     # Write to MongoDB
-    result.write.format("mongodb").mode("overwrite").save()
+    result.write \
+    .format("mongodb") \
+    .mode("overwrite") \
+    .option("uri", mongo_uri) \
+    .option("database", MONGO_DB) \
+    .option("collection", MONGO_COLLECTION) \
+    .save()
+
 
     # Also write CSV
     result.write.option("header", True).mode("overwrite").csv("output/municipal_vacancies")
