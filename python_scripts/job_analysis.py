@@ -17,7 +17,8 @@ MONGO_DB = os.getenv("MONGO_DB")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 
 # Construct Mongo URI
-mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}.{MONGO_COLLECTION}"
+# mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}.{MONGO_COLLECTION}"
+mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
 
 # Initialize Spark Session
 spark = SparkSession.builder \
@@ -30,13 +31,19 @@ spark = SparkSession.builder \
     .config("spark.mongodb.write.connection.uri", mongo_uri) \
     .getOrCreate()
 
-# Load your JSON data (from HDFS or local)
+# Load JSON data from HDFS
 data_path = "hdfs://localhost:9000/user/root/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json"
 df = spark.read.json(data_path)
 
-# --- Analysis 1: Average number of vacancies per municipality ---
+# Average number of vacancies per municipality:
 def calculate_avg_vacancies(dataframe):
-    result = dataframe.groupBy(col("workplace_address.municipality").alias("municipality")) \
+    
+    # Filter out null values
+    df_filtered = dataframe.filter(
+        (col("workplace_address.municipality").isNotNull()) &
+        (col("number_of_vacancies").isNotNull())
+    )
+    result = df_filtered.groupBy(col("workplace_address.municipality").alias("municipality")) \
         .agg(
             avg("number_of_vacancies").alias("avg_number_of_vacancies"),
             count(lit(1)).alias("num_vacancies_per_municipality")
@@ -54,18 +61,18 @@ def calculate_avg_vacancies(dataframe):
 
 
     # Also write CSV
-    result.write.option("header", True).mode("overwrite").csv("output/municipal_vacancies")
+    # result.write.option("header", True).mode("overwrite").csv("output/municipal_vacancies")
 
     return result
 
 
-# --- Analysis 2: KMeans clustering on combined text fields ---
+# KMeans clustering on combined text fields
 def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=50):
     # Combine text columns
     combined_col = concat_ws(" ", *[col(c) for c in text_cols])
     df_combined = dataframe.withColumn("combined_text", combined_col)
 
-    # Vectorize using simple TF-IDF (for simplicity)
+    # Vectorize using TF-IDF
     from pyspark.ml.feature import Tokenizer, HashingTF, IDF
 
     tokenizer = Tokenizer(inputCol="combined_text", outputCol="words")
@@ -98,7 +105,7 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
 
     final_df = best_model.transform(df_pca).withColumnRenamed("prediction", "clusterNumber")
 
-    # Save CSV for Tableau
+    # Save as a CSV file
     final_df.write.option("header", True).mode("overwrite").csv("output/job_clusters")
 
     return final_df
