@@ -1,6 +1,6 @@
 # Job Market Analysis
 
-A Scala project for analyzing job market data using Apache Spark.
+A project for analyzing job market data using Apache Spark.
 
 ## Prerequisites
 
