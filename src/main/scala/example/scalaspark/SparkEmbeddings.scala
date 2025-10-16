@@ -11,7 +11,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, SparseVector}
 import org.apache.spark.sql.functions.udf
 
 
-object SparkMainBella extends App {
+object SparkEmbeddings extends App {
 
   def loadEmbeddings(path: String, spark: SparkSession):DataFrame = {
 
@@ -70,7 +70,7 @@ object SparkMainBella extends App {
     .setStopWords(combinedStops) // multilingual stopword support
 
   val embeddings = XlmRoBertaEmbeddings
-    .pretrained("xlm_v_base", "xx")
+    .pretrained("xlm_roberta_base", "xx")
     .setInputCols("document", "cleanTokens")
     .setOutputCol("embeddings")
 
@@ -94,13 +94,28 @@ object SparkMainBella extends App {
   val model = pipeline.fit(cleanedData)
   val result = model.transform(cleanedData)
 
-  result.select("id", "clean_text", "finished_embeddings").show(2, truncate = false)
-  //result.write.mode("overwrite").parquet("hdfs://localhost:9000/user/isabella/jobstream/processed/job_ads_with_embeddings.parquet") 
-  
+  val avgVectorUDF = udf((vectors: Seq[Vector]) => {
+  if (vectors == null || vectors.isEmpty) null
+  else {
+    val dim = vectors.head.size
+    val summed = new Array[Double](dim)
+    vectors.foreach { v =>
+      v.toArray.zipWithIndex.foreach { case (value, i) => summed(i) += value }
+    }
+    Vectors.dense(summed.map(_ / vectors.size))
+  }
+})
 
+  val result_embedding = result.withColumn("avg_embeddings", avgVectorUDF(col("finished_embeddings")))
+
+  
+  //result_embedding.write.mode("overwrite").option("compression", "snappy").parquet("hdfs://localhost:9000/user/isabella/jobstream/processed/job_ads_with_embeddings.parquet") 
+  //result_embedding..write.mode("overwrite").json("/home/isabella/DataIntensiveComputing/job-market-analysis/data/job_ads_embeddings.parquet")
+  //result_embedding.select("id", "avg_embedding").show(5, truncate=false)
+  result_embedding.select("id","headline", "avg_embeddings").write.mode("overwrite").option("compression", "snappy").parquet("hdfs://localhost:9000/user/isabella/jobstream/processed/job_ads_with_embeddings.parquet")
 
   // returning result
-  result
+  result_embedding
 
 }
 
