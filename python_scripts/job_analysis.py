@@ -32,7 +32,8 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Load JSON data from HDFS
-data_path = "hdfs://localhost:9000/user/root/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json"
+# data_path = "hdfs://localhost:9000/user/root/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json"
+data_path = "hdfs://namenode:9000/user/root/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json"
 df = spark.read.json(data_path)
 
 # Average number of vacancies per municipality:
