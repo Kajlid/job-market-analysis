@@ -14,9 +14,13 @@ lazy val root = (project in file("."))
       "org.apache.spark" %% "spark-core" % "3.4.1",
       "org.apache.spark" %% "spark-sql"  % "3.4.1",
       "org.apache.spark" %% "spark-mllib" % "3.4.1",
-      "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.5"
+      "com.johnsnowlabs.nlp" %% "spark-nlp" % "6.1.5",
+      "org.mongodb.spark" %% "mongo-spark-connector" % "10.5.0",
     ),
-    resolvers += "John Snow Labs" at "https://repo.johnsnowlabs.com/public"
+    resolvers ++= Seq(
+      "John Snow Labs" at "https://repo.johnsnowlabs.com/",
+      "John Snow Labs Public" at "https://repo.johnsnowlabs.com/public/"
+    )
   )
 
 fork := true
