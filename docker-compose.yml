@@ -11,6 +11,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
     volumes:
       - mongo_data:/data/db
+    networks:
+      - spark_hdfs_mongo_net
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
@@ -18,25 +20,27 @@ services:
     environment:
       - CLUSTER_NAME=test
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
-      - HDFS_CONF_dfs_namenode_name_dir=file:///hadoop/dfs/name
     ports:
       - "9000:9000"
       - "9870:9870"
     volumes:
       - hdfs_namenode:/hadoop/dfs/name
+    networks:
+      - spark_hdfs_mongo_net
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: hdfs-datanode
     environment:
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
-      - HDFS_CONF_dfs_data_dir=file:///hadoop/dfs/data
     depends_on:
       - namenode
     ports:
       - "9864:9864"
     volumes:
       - hdfs_datanode:/hadoop/dfs/data
+    networks:
+      - spark_hdfs_mongo_net
 
   spark:
     build: .
@@ -48,6 +52,7 @@ services:
     volumes:
       - ./python_scripts:/app/python_scripts
       - ./output:/app/output
+      - ./conf/core-site.xml:/opt/spark/conf/core-site.xml
     env_file:
       - .env
     networks:
