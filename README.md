@@ -6,10 +6,12 @@ A project for analyzing job market data using Apache Spark.
 
 Make sure you have the following installed:
 
-- [Java JDK 11](https://adoptium.net/) (or compatible version)
+- [Java JDK 17](https://adoptium.net/) (or compatible version)
 - [Scala](https://www.scala-lang.org/download/)
 - [sbt](https://www.scala-sbt.org/)
 - [VS Code](https://code.visualstudio.com/) with [Metals extension](https://scalameta.org/metals/)
+
+For running the Python script
 
 > Note: Scala and sbt versions are configured in `build.sbt`.
 
