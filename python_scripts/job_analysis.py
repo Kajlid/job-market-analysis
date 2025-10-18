@@ -31,21 +31,6 @@ HDFS_PATH = os.getenv("HDFS_PATH")
 # Construct Mongo URI
 mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
 
-# Initialize Spark Session
-spark = SparkSession.builder \
-    .appName("JobAnalysisApp").master("local[*]").config("spark.mongodb.write.connection.uri", mongo_uri) \
-    .config("spark.sql.caseSensitive", "true") \
-    .config("spark.driver.memory", "8g") \
-    .config("spark.executor.memory", "8g") \
-    .config("spark.sql.files.maxPartitionBytes", "128MB") \
-    .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
-    .config("spark.mongodb.write.connection.uri", mongo_uri) \
-    .getOrCreate()
-
-# Load JSON data from HDFS
-data_path = "hdfs://localhost:9000/user/root/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json"
-df = spark.read.json(data_path)
-
 def collect_data():
     # Configuration
     API_URL = "https://jobstream.api.jobtechdev.se/snapshot"
