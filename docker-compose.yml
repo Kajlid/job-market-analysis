@@ -55,24 +55,43 @@ services:
       - "27017:27017"
 
 
-  job-analysis:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    container_name: job-analysis
+
+  spark:
+    image: apache/spark:3.5.1
+    container_name: spark
     depends_on:
       - mongodb
-      - namenode
-      - datanode
     volumes:
-      - ./python_scripts:/app/python_scripts
-      - ./hdfs/conf:/opt/hadoop/etc/hadoop:ro
-      - ./output:/app/output
-    env_file:
-      - .env
-    command: ["python3", "python_scripts/job_analysis.py"]
-    networks:
-      - hadoop_network
+      - ./:/app
+    working_dir: /app
+    command: ["/bin/bash", "-c", "
+      python3 -m venv /app/venv && \
+      apt-get update && apt-get install -y python3-venv python3-pip && \
+      source /app/venv/bin/activate && \
+      pip install --no-cache-dir -r requirements.txt && \
+      /opt/spark/bin/spark-submit --master local[*] --conf spark.executorEnv.PYTHONPATH=/app/venv/lib/python3.12/site-packages python_scripts/job_analysis.py
+      "]
+    # command: ["/bin/bash", "-c", "pip install -r requirements.txt && /opt/spark/bin/spark-submit --master local[*] python_scripts/job_analysis.py"]
+
+
+  # job-analysis:
+  #   build: 
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: job-analysis
+  #   depends_on:
+  #     - mongodb
+  #     - namenode
+  #     - datanode
+  #   volumes:
+  #     - ./python_scripts:/app/python_scripts
+  #     - ./hdfs/conf:/opt/hadoop/etc/hadoop:ro
+  #     - ./output:/app/output
+  #   env_file:
+  #     - .env
+  #   command: ["python3", "python_scripts/job_analysis.py"]
+  #   networks:
+  #     - hadoop_network
 
 networks:
   hadoop_network:

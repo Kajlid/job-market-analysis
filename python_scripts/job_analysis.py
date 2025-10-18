@@ -3,11 +3,11 @@ from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.functions import col, avg, count, lit, concat_ws, lower, regexp_replace, trim, split
-from pyspark.ml.feature import PCA, Normalizer, Tokenizer, StopWordsRemover
-from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import ClusteringEvaluator
-from pyspark.ml import Pipeline
-from pyspark.ml.feature import Tokenizer, HashingTF, IDF
+# from pyspark.ml.feature import PCA, Normalizer, Tokenizer, StopWordsRemover
+# from pyspark.ml.clustering import KMeans
+# from pyspark.ml.evaluation import ClusteringEvaluator
+# from pyspark.ml import Pipeline
+# from pyspark.ml.feature import Tokenizer, HashingTF, IDF
 from pyspark.sql.types import ArrayType, DoubleType, StringType
 from pyspark.sql.window import Window
 import datetime
@@ -36,6 +36,7 @@ HDFS_PATH = os.getenv("HDFS_PATH")
 
 # Construct Mongo URI
 mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}?authSource=admin"
+# mongo_uri = os.getenv("MONGO_URI")
 
 retry_count = 0
 while retry_count < 10:
@@ -270,7 +271,7 @@ def calculate_vacancies_per_municipality(dataframe):
     .format("mongodb") \
     .mode("overwrite") \
     .option("uri", mongo_uri) \
-    .option("database", MONGO_DB) \
+    .option("database", mongo_db) \
     .option("collection", MONGO_COLLECTION).save()      # write to collection named "vacancies"
 
 
@@ -434,7 +435,7 @@ def main():
     df = spark.read.json(data_path)
     
     # print(df.schema)
-    # calculate_vacancies_per_municipality(df)
+    calculate_vacancies_per_municipality(df)
     
     # df.select("occupation.label").distinct().show(40, truncate=False)
 
@@ -445,10 +446,10 @@ def main():
     # cleanTextdf = calculate_keyword_frequencies(df)
     # cleanTextdf.select("words", "filtered_words").show(1, truncate=False)
     
-    text_columns = ["headline", "description.text", "description.needs", "description.requirements"]
-    clustered_df = cluster_job_ads(df, text_columns)
-    # clustered_df = cluster_job_ads_mongo_single_collection(df, text_columns, k_range=range(2, 11), num_components=50)
-    clustered_df.show(5, truncate=False)
+    # text_columns = ["headline", "description.text", "description.needs", "description.requirements"]
+    # clustered_df = cluster_job_ads(df, text_columns)
+    # # clustered_df = cluster_job_ads_mongo_single_collection(df, text_columns, k_range=range(2, 11), num_components=50)
+    # clustered_df.show(5, truncate=False)
 
     # avg_vacancies_df = calculate_avg_vacancies(df)
     # avg_vacancies_df.show(5, truncate=False)
