@@ -369,7 +369,8 @@ def main():
     
     keywords_df = calculate_keyword_frequencies(df)
     
-    clusters_df = cluster_job_ads(df)
+    text_columns = ["headline", "description.text", "description.needs", "description.requirements"]
+    clustered_df = cluster_job_ads(df, text_columns)
 
     spark.stop()
 
