@@ -1,36 +1,33 @@
 #!/usr/bin/env bash
+# Starts the Hadoop NameNode
 
-# Starts the Hadoop name node. Expects the daemon flag as a parameter
+# Set Hadoop environment
+export HADOOP_HOME=/opt/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
 
-source /etc/bash.bashrc
+echo "Starting NameNode..."
 
-echo "start-hadoop-namenode.sh"
-
-# Format namenode
-if [ ! -f /opt/hdfs/name/current/VERSION ]; then
-  hdfs namenode -format -force
+# Format NameNode if needed
+if [ ! -f "/opt/hdfs/name/current/VERSION" ]; then
+    echo "Formatting NameNode directory..."
+    $HADOOP_HOME/bin/hdfs namenode -format -force
 fi
 
-echo "Namenode formatted, starting HDFS service"
+echo "Starting HDFS NameNode service..."
+$HADOOP_HOME/sbin/hadoop-daemon.sh start namenode
 
-# Start HDFS service
-hdfs --daemon start namenode
-
-# Wait for the HDFS NameNode to start
-while ! jps | grep -q 'NameNode'; do
-  echo "Waiting for NameNode to start..."
-  sleep 5
+# Wait for NameNode to be up
+while ! $HADOOP_HOME/bin/jps | grep -q 'NameNode'; do
+    echo "Waiting for NameNode to start..."
+    sleep 5
 done
 
 echo "NameNode is running"
 
 # Fix permissions for root directory
-hdfs dfsadmin -safemode leave
-hdfs dfs -chown $HDFS_USER:$HDFS_USER /
-# Chmod / so anyone can write to it
-hdfs dfs -chmod 777 /
+$HADOOP_HOME/bin/hdfs dfsadmin -safemode leave
+$HADOOP_HOME/bin/hdfs dfs -chown $HDFS_USER:$HDFS_USER /
+$HADOOP_HOME/bin/hdfs dfs -chmod 777 /
 
-# Start daemon if specified
-if [[ "${1}" != 'daemon' ]]; then
-  sleep infinity
-fi
+# Keep container running
+sleep infinity

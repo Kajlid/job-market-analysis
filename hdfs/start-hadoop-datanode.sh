@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
+# Starts the Hadoop DataNode
 
-# Starts the Hadoop data node.
+# Set Hadoop environment
+export HADOOP_HOME=/opt/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
 
-source /etc/bash.bashrc
+echo "Starting DataNode..."
 
-echo "start-hadoop-datanode.sh"
+$HADOOP_HOME/sbin/hadoop-daemon.sh start datanode
 
-# Start HDFS data node
-hdfs --daemon start datanode
-# Start daemon if specified
-if [[ "${1}" != 'daemon' ]]; then
-  sleep infinity
-fi
+# Keep container running
+sleep infinity

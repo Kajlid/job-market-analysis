@@ -27,14 +27,12 @@ services:
       hostname: datanode
       command: start-hadoop datanode
       ports:
-        - 9164:9864        # 9864:9864
+        - 9164:9864        
       environment:
         HDFS_USER: hdfsuser
       volumes:
         - hdfs_datanode:/opt/hdfs/data
         - ./hdfs/conf:/opt/hadoop/etc/hadoop:ro
-      env_file:
-        - hadoop.env
       depends_on:
         - namenode
 
@@ -47,9 +45,9 @@ services:
       - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASS}
-      - MONGO_INITDB_DATABASE=${MONGO_DB}
+      - MONGO_INITDB_ROOT_USERNAME=test-user
+      - MONGO_INITDB_ROOT_PASSWORD=test-password987654321
+      - MONGO_INITDB_DATABASE=jobmarket
     command: ["--auth"]
     ports:
       - "27017:27017"
@@ -57,20 +55,17 @@ services:
 
 
   spark:
-    image: apache/spark:3.5.1
+    build: .
     container_name: spark
     depends_on:
       - mongodb
+      - namenode
+      - datanode
+    networks:
+      - hadoop_network
     volumes:
       - ./:/app
     working_dir: /app
-    command: ["/bin/bash", "-c", "
-      python3 -m venv /app/venv && \
-      apt-get update && apt-get install -y python3-venv python3-pip && \
-      source /app/venv/bin/activate && \
-      pip install --no-cache-dir -r requirements.txt && \
-      /opt/spark/bin/spark-submit --master local[*] --conf spark.executorEnv.PYTHONPATH=/app/venv/lib/python3.12/site-packages python_scripts/job_analysis.py
-      "]
     # command: ["/bin/bash", "-c", "pip install -r requirements.txt && /opt/spark/bin/spark-submit --master local[*] python_scripts/job_analysis.py"]
 
 

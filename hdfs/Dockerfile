@@ -31,6 +31,7 @@ ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 #     && rm hadoop-${HADOOP_VERSION}.tar.gz \
 #     && rm -rf /var/lib/apt/lists/*
 
+
 RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get -o Acquire::AllowInsecureRepositories=true \
@@ -38,6 +39,12 @@ RUN apt-get clean \
     && apt-get install -y --no-install-recommends \
        openjdk-11-jdk-headless wget net-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and extract Hadoop
+RUN wget -q https://downloads.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz -O /tmp/hadoop.tar.gz \
+    && mkdir -p ${HADOOP_HOME} \
+    && tar -xzf /tmp/hadoop.tar.gz -C ${HADOOP_HOME} --strip-components=1 \
+    && rm /tmp/hadoop.tar.gz
 
 # Add minimal log4j.properties to silence warnings
 RUN mkdir -p $HADOOP_HOME/etc/hadoop \
@@ -48,6 +55,9 @@ RUN mkdir -p $HADOOP_HOME/etc/hadoop \
     && echo 'log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n' >> $HADOOP_HOME/etc/hadoop/log4j.properties
 
 
+# Create HDFS directories
+RUN mkdir -p /opt/hdfs/name /opt/hdfs/data \
+    && chown -R root:root /opt/hdfs
 # Copy and setup startup scripts
 # COPY start-hadoop*.sh /opt/util/bin/
 # COPY start-hadoop*.sh /usr/local/bin/

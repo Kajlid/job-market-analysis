@@ -1,5 +1,5 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.functions import col, avg, count, lit, concat_ws, lower, regexp_replace, trim, split
@@ -19,13 +19,19 @@ from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
-mongo_user = os.getenv("MONGO_USER")
-mongo_pass = os.getenv("MONGO_PASS")
-mongo_db = os.getenv("MONGO_DB")
-mongo_host = os.getenv("MONGO_HOST", "mongodb")
-mongo_port = int(os.getenv("MONGO_PORT", 27017))
+# mongo_user = os.getenv("MONGO_USER")
+mongo_user = "test-user"
+mongo_pass = "test-password987654321"
+# MONGO_HOST="cluster1.4hsuyrb.mongodb.net"
+mongo_host="mongodb"
+mongo_db="jobmarket"
+mongo_port=27017
+# mongo_pass = os.getenv("MONGO_PASS")
+# mongo_db = os.getenv("MONGO_DB")
+# mongo_host = os.getenv("MONGO_HOST", "mongodb")
+# mongo_port = int(os.getenv("MONGO_PORT", 27017))
 
 # MONGO_USER = os.getenv("MONGO_USER")
 # MONGO_PASS = os.getenv("MONGO_PASS")
@@ -56,14 +62,59 @@ db = client[mongo_db]
 print("MongoDB collections:", db.list_collection_names())      # check connectivity
 # mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
 
-def collect_data():
+def collect_data(spark):
+    import tempfile
+    import os
+
+    jobstream_url = "https://jobstream.api.jobtechdev.se/snapshot"
+    today = datetime.datetime.now(datetime.timezone.utc)
+
+    # HDFS directory and file
+    hdfs_dir = f"/user/hdfsuser/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    hdfs_path = hdfs_dir + "job_ads.json"
+
+    print(f"Fetching data from JobStream API...")
+    headers = {"accept": "application/json"}
+    response = requests.get(jobstream_url, headers=headers, timeout=10)
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
+
+    data = response.json()
+    print(f"Fetched {len(data)} records")
+
+    # Write JSON to a temporary local file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        local_file = os.path.join(tmpdir, "job_ads.json")
+        with open(local_file, "w", encoding="utf-8") as f:
+            for record in data:
+                f.write(json.dumps(record) + "\n")  # line-delimited JSON
+
+        print(f"Saved snapshot to temporary file: {local_file}")
+
+        # Ensure HDFS directory exists
+        fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+        fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+
+        # Write local file to HDFS
+        subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path], check=True)
+        print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+
+    # Read JSON from HDFS into Spark DataFrame
+    df = spark.read.json(hdfs_path)
+    print(f"Loaded DataFrame with {df.count()} rows and {len(df.columns)} columns")
+
+    return hdfs_path
+
+
+""" def collect_data(spark):
     jobstream_url = "https://jobstream.api.jobtechdev.se/snapshot"
     today = datetime.datetime.now(datetime.timezone.utc)         # 2025-09-29
     # print(f"{today.month:02d} {today.day:02d}")
 
     hdfs_dir = f"/user/hdfsuser/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
     # hdfs_dir = f"/user/{os.getlogin()}/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
-    local_file = "/tmp/data.json"
+    # local_file = "/tmp/data.json"
 
     hdfs_path = hdfs_dir + "job_ads.json"    # /data/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json
     # print(hdfs_path)        
@@ -78,23 +129,34 @@ def collect_data():
         raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
 
     data = response.json()
+    print(f"Fetched {len(data)} records from JobStream")
     
-    os.makedirs("/tmp", exist_ok=True)
-    with open(local_file, "w") as f:
-        json.dump(data, f)       # Save locally first
-    print(f"Saved {len(data)} records to {local_file}")
+    # df = spark.read.json(spark.sparkContext.parallelize([str(data)]))
+    rdd = spark.sparkContext.parallelize(data) 
+    df = spark.read.json(rdd)
+    # df = spark.read.json(spark.sparkContext.parallelize([json.dumps(data)]))
+    
+    # os.makedirs("/tmp", exist_ok=True)
+    # with open(local_file, "w") as f:
+    #     json.dump(data, f)       # Save locally first
+    # print(f"Saved {len(data)} records to {local_file}")
 
     # with open("data/data.json", "w") as f:       # local version
     #     json.dump(data, f)
         
     # print("Saved", len(data), "records to data.json")
 
-    subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
+    # subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
 
-    subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path])
-    print(f"Snapshot stored in HDFS: {hdfs_path}")
+    # subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path])
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+    fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+
+    # Write DataFrame to HDFS as JSON
+    df.coalesce(1).write.mode("overwrite").json(hdfs_dir)
+    print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
     
-    return f"hdfs://namenode:8020{hdfs_path}"
+    return f"hdfs://namenode:8020{hdfs_path}" """
 
 
 def calculate_keyword_frequencies(dataframe):
@@ -415,20 +477,20 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
 
 def main():
     print("Running the script")
-    
-    data_path = collect_data()
 
     # Initialize Spark Session
     spark = SparkSession.builder \
         .appName("JobAnalysisApp").master("local[*]") \
         .config("spark.mongodb.write.connection.uri", mongo_uri) \
         .config("spark.sql.caseSensitive", "true") \
-        .config("spark.driver.memory", "8g") \
-        .config("spark.executor.memory", "8g") \
+        .config("spark.driver.memory", "16g") \
+        .config("spark.executor.memory", "16g") \
         .config("spark.sql.files.maxPartitionBytes", "128MB") \
         .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
         .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
         .getOrCreate()
+        
+    data_path = collect_data(spark)
 
     # Load JSON data from HDFS
     # data_path = HDFS_PATH
