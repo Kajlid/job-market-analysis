@@ -9,6 +9,7 @@ services:
       networks:
         - hadoop_network
       command: start-hadoop namenode
+      # command: ["/opt/util/bin/start-hadoop", "namenode"]
       ports:
         - 8020:8020 # RPC
         - "9870:9870" # WebUI        test: 9870:9870
@@ -55,7 +56,9 @@ services:
 
 
   job-analysis:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: job-analysis
     depends_on:
       - mongodb

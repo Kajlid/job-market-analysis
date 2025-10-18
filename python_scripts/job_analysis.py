@@ -404,7 +404,7 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
     .format("mongodb") \
     .mode("overwrite") \
     .option("uri", mongo_uri) \
-    .option("database", MONGO_DB) \
+    .option("database", mongo_db) \
     .option("collection", MONGO_COLLECTION).save()      # write to collection named "clusters"
     
     # final_df.write.option("header", True).mode("overwrite").csv("output/job_clusters")
@@ -413,6 +413,7 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
 
 
 def main():
+    print("Running the script")
     
     data_path = collect_data()
 

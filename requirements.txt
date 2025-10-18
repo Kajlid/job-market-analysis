@@ -4,4 +4,3 @@ pandas
 pymongo
 python-dotenv
 requests
-
