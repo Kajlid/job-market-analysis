@@ -10,19 +10,91 @@ from pyspark.ml import Pipeline
 from pyspark.ml.feature import Tokenizer, HashingTF, IDF
 from pyspark.sql.types import ArrayType, DoubleType, StringType
 from pyspark.sql.window import Window
+import datetime
+import json
+import time
+import requests
+import subprocess
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
 
 # Load environment variables
 load_dotenv()
 
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-MONGO_HOST = os.getenv("MONGO_HOST")
-MONGO_DB = os.getenv("MONGO_DB")
+mongo_user = os.getenv("MONGO_USER")
+mongo_pass = os.getenv("MONGO_PASS")
+mongo_db = os.getenv("MONGO_DB")
+mongo_host = os.getenv("MONGO_HOST", "mongodb")
+mongo_port = int(os.getenv("MONGO_PORT", 27017))
+
+# MONGO_USER = os.getenv("MONGO_USER")
+# MONGO_PASS = os.getenv("MONGO_PASS")
+# MONGO_HOST = os.getenv("MONGO_HOST", "mongodb")
+# MONGO_DB = os.getenv("MONGO_DB")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 HDFS_PATH = os.getenv("HDFS_PATH")
 
 # Construct Mongo URI
-mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
+mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}?authSource=admin"
+
+retry_count = 0
+while retry_count < 10:
+    try:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        client.server_info()  # force connection
+        print("MongoDB is ready")
+        break
+    except ServerSelectionTimeoutError:
+        retry_count += 1
+        print("Waiting for MongoDB to be ready...")
+        time.sleep(2)
+else:
+    raise RuntimeError("MongoDB not reachable after 20s")
+
+db = client[mongo_db]
+print("MongoDB collections:", db.list_collection_names())      # check connectivity
+# mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
+
+def collect_data():
+    jobstream_url = "https://jobstream.api.jobtechdev.se/snapshot"
+    today = datetime.datetime.now(datetime.timezone.utc)         # 2025-09-29
+    # print(f"{today.month:02d} {today.day:02d}")
+
+    hdfs_dir = f"/user/hdfsuser/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    # hdfs_dir = f"/user/{os.getlogin()}/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    local_file = "/tmp/data.json"
+
+    hdfs_path = hdfs_dir + "job_ads.json"    # /data/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json
+    # print(hdfs_path)        
+    
+    print(f"Writing to HDFS path: {hdfs_path}")
+
+    headers = {"accept": "application/json"}
+    response = requests.get(jobstream_url, headers=headers)
+    print("Status code:", response.status_code)
+    
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
+
+    data = response.json()
+    
+    os.makedirs("/tmp", exist_ok=True)
+    with open(local_file, "w") as f:
+        json.dump(data, f)       # Save locally first
+    print(f"Saved {len(data)} records to {local_file}")
+
+    # with open("data/data.json", "w") as f:       # local version
+    #     json.dump(data, f)
+        
+    # print("Saved", len(data), "records to data.json")
+
+    subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
+
+    subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path])
+    print(f"Snapshot stored in HDFS: {hdfs_path}")
+    
+    return f"hdfs://namenode:8020{hdfs_path}"
+
 
 def calculate_keyword_frequencies(dataframe):
 
@@ -272,7 +344,7 @@ def cluster_job_ads_mongo_single_collection(dataframe, text_cols, k_range=range(
     final_df_with_summary.write.format("mongodb") \
         .mode("overwrite") \
         .option("uri", mongo_uri) \
-        .option("database", MONGO_DB) \
+        .option("database", mongo_db) \
         .option("collection", MONGO_COLLECTION) \
         .save()
 
@@ -341,20 +413,23 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
 
 
 def main():
+    
+    data_path = collect_data()
 
     # Initialize Spark Session
     spark = SparkSession.builder \
-        .appName("JobAnalysisApp").master("local[*]").config("spark.mongodb.write.connection.uri", mongo_uri) \
+        .appName("JobAnalysisApp").master("local[*]") \
+        .config("spark.mongodb.write.connection.uri", mongo_uri) \
         .config("spark.sql.caseSensitive", "true") \
         .config("spark.driver.memory", "8g") \
         .config("spark.executor.memory", "8g") \
         .config("spark.sql.files.maxPartitionBytes", "128MB") \
         .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
-        .config("spark.mongodb.write.connection.uri", mongo_uri) \
+        .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
         .getOrCreate()
 
     # Load JSON data from HDFS
-    data_path = HDFS_PATH
+    # data_path = HDFS_PATH
     df = spark.read.json(data_path)
     
     # print(df.schema)

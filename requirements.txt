@@ -1,0 +1,7 @@
+pyspark==3.5.1
+numpy
+pandas
+pymongo
+python-dotenv
+requests
+
