@@ -7,11 +7,13 @@ FROM ubuntu:latest
 
 ENV SPARK_VERSION=3.5.1
 ENV HADOOP_VERSION=3.2.4
+ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 ENV HADOOP_HOME=/opt/hadoop
 ENV SPARK_HOME=/opt/spark
 # ENV JAVA_HOME=/opt/java/openjdk 
 # ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+# ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$SPARK_HOME/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH
 # ENV PATH=$SPARK_HOME/bin:$PATH
 # ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
@@ -56,7 +58,7 @@ RUN apt-get clean \
     && apt-get -o Acquire::AllowInsecureRepositories=true \
                -o Acquire::AllowDowngradeToInsecureRepositories=true update \
     && apt-get install -y --no-install-recommends \
-       python3 python3-pip python3-venv wget openjdk-8-jdk-headless net-tools \
+       python3 python3-pip python3-venv python3-setuptools wget openjdk-11-jdk-headless net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 
