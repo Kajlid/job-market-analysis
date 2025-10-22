@@ -75,34 +75,55 @@ def collect_data(spark):
 
     print(f"Fetching data from JobStream API...")
     headers = {"accept": "application/json"}
-    response = requests.get(jobstream_url, headers=headers, timeout=10)
+    params = {"limit": 100}
+    # response = requests.get(jobstream_url, params=params, headers=headers, timeout=10)
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
+    # if response.status_code != 200:
+    #     raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
 
-    data = response.json()
-    print(f"Fetched {len(data)} records")
+    # data = response.json()
+    # print(f"Fetched {len(data)} records")
 
     # Write JSON to a temporary local file
-    with tempfile.TemporaryDirectory() as tmpdir:
-        local_file = os.path.join(tmpdir, "job_ads.json")
-        with open(local_file, "w", encoding="utf-8") as f:
-            for record in data:
-                f.write(json.dumps(record) + "\n")  # line-delimited JSON
+    # with tempfile.TemporaryDirectory() as tmpdir:
+    #     local_file = os.path.join(tmpdir, "job_ads.json")
+    #     with open(local_file, "w", encoding="utf-8") as f:
+    #         for record in data:
+    #             f.write(json.dumps(record) + "\n")  # line-delimited JSON
 
-        print(f"Saved snapshot to temporary file: {local_file}")
+        # print(f"Saved snapshot to temporary file: {local_file}")
 
         # Ensure HDFS directory exists
-        fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
-        fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+        # fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+        # fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
 
-        # Write local file to HDFS
-        subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path], check=True)
-        print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+        # # Write local file to HDFS
+        # subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path], check=True)
+        # print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+        
+    # with open("data/data.json") as f:
+    #     data = json.load(f)
+    
+    with open("data/data.json") as f:
+        data = json.load(f)  # list of dicts
+
+    with open("data/job_ads_line.json", "w") as f:
+        for record in data:
+            f.write(json.dumps(record) + "\n")
+    
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+    fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+    # hdfs_path = "hdfs://namenode:8020/user/hdfsuser/jobstream/job_ads.json"
+    # subprocess.run(["hdfs", "dfs", "-put", "-f", "data/job_ads_line.json", hdfs_path], check=True)
+    df = spark.read.json("data/job_ads_line.json")
+    df.write.mode("overwrite").json(hdfs_path)  
+    # print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
 
     # Read JSON from HDFS into Spark DataFrame
-    df = spark.read.json(hdfs_path)
-    print(f"Loaded DataFrame with {df.count()} rows and {len(df.columns)} columns")
+    # df = spark.read.json(hdfs_path)
+    # print(f"Loaded DataFrame with {df.limit(5).count()} rows (preview) and {len(df.columns)} columns")
+    df_hdfs = spark.read.json(hdfs_path)
+    df_hdfs.show(5, truncate=False)
 
     return hdfs_path
 

@@ -8,12 +8,18 @@ FROM ubuntu:latest
 # Prevent interactive prompts during build
 # ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update && \
+    apt-get install -y openjdk-11-jdk && \
+    rm -rf /var/lib/apt/lists/*
+
+
 # Set versions and paths first
 ENV HADOOP_VERSION=3.2.4
 # ENV HADOOP_HOME=/opt/hadoop-${HADOOP_VERSION}
 ENV HADOOP_HOME=/opt/hadoop
 ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
+ENV PATH=$PATH:$JAVA_HOME/bin
 ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 # ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 # ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
