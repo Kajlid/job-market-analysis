@@ -306,8 +306,6 @@ def calculate_vacancies_per_municipality(dataframe, collection="vacancies"):
     .option("database", mongo_db) \
     .option("collection", collection).save()      # write to collection named "vacancies"
 
-    return result
-
 def vacancies_over_time(df, collection="vacancies_over_time"):
     df = df.withColumn("date", F.to_date("publication_date"))
     result = df.groupBy("date") \
