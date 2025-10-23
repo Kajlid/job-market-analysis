@@ -306,8 +306,6 @@ def calculate_vacancies_per_municipality(dataframe, collection="vacancies"):
     .option("database", mongo_db) \
     .option("collection", collection).save()      # write to collection named "vacancies"
 
-    return result
-
 def vacancies_over_time(df, collection="vacancies_over_time"):
     df = df.withColumn("date", F.to_date("publication_date"))
     result = df.groupBy("date") \
@@ -359,7 +357,17 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), vector_size=30, 
 
     # Tokenizer and StopWordsRemover
     tokenizer = Tokenizer(inputCol="combined_text", outputCol="words")
-    stopwords_remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
+    remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
+    english_stops = StopWordsRemover.loadDefaultStopWords("english")
+    swedish_stops = StopWordsRemover.loadDefaultStopWords("swedish")
+    additional_stops = ["samt", "hos", "arbeta", "söker", "både", "vill", "kommer", "kommun", "län", "roll", "arbetsplats", "sök", "rekryteringsprocess",
+                        "arbete", "jobb", "jobba", "tjänsten", "arbetar", "ansökan", "får", "se", "ser", "enligt", "del", "krav"]
+    
+    regions = [r[0].lower() for r in dataframe.select("workplace_address.region").distinct().collect() if r[0]]
+    municipalities = [m[0].lower() for m in dataframe.select("workplace_address.municipality").distinct().collect() if m[0]]
+    stops = english_stops + swedish_stops + additional_stops + regions + municipalities
+
+    stopwords_remover = StopWordsRemover(inputCol="words", outputCol="filtered_words", stopWords=stops)
 
     # Word2Vec embeddings
     word2vec = Word2Vec(
@@ -391,23 +399,27 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), vector_size=30, 
 
     # Find best K using silhouette
     evaluator = ClusteringEvaluator(featuresCol="pcaFeatures", predictionCol="prediction", metricName="silhouette")
-    best_k, best_score, best_model = 2, float("-inf"), None
+    # best_k, best_score, best_model = 2, float("-inf"), None
 
-    for k in k_range:
-        kmeans = KMeans(featuresCol="pcaFeatures", predictionCol="prediction", k=k, seed=1)
-        model_k = kmeans.fit(df_pca)
-        preds = model_k.transform(df_pca)
-        score = evaluator.evaluate(preds)
-        if score > best_score:
-            best_k, best_score, best_model = k, score, model_k
+    # for k in k_range:
+    #     kmeans = KMeans(featuresCol="pcaFeatures", predictionCol="prediction", k=k, seed=1)
+    #     model_k = kmeans.fit(df_pca)
+    #     preds = model_k.transform(df_pca)
+    #     score = evaluator.evaluate(preds)
+    #     if score > best_score:
+    #         best_k, best_score, best_model = k, score, model_k
+    
+    kmeans = KMeans(featuresCol="pcaFeatures", predictionCol="prediction", k=6, seed=1)
+    model_k = kmeans.fit(df_pca)
+    preds = model_k.transform(df_pca)
+    score = evaluator.evaluate(preds)
 
     # Transform to array for storage
     vector_to_array_udf = F.udf(lambda v: v.toArray().tolist(), ArrayType(DoubleType()))
-    final_df = best_model.transform(df_pca) \
+    final_df = preds \
         .withColumnRenamed("prediction", "clusterNumber") \
         .withColumn("pcaFeaturesArray", vector_to_array_udf("pcaFeatures")) \
-        .withColumn("silhouette_score", F.lit(best_score)) \
-        .withColumn("best_k", F.lit(best_k)) \
+        .withColumn("silhouette_score", F.lit(score)) \
         .withColumn("job_title", col("occupation.label")) \
         .drop("features", "normFeatures", "pcaFeatures")
 
@@ -444,9 +456,15 @@ def main():
         .config("spark.driver.memoryOverhead", "8g") \
         .config("spark.sql.files.maxPartitionBytes", "128MB") \
         .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
+        .config("spark.memory.offHeap.enabled", "true") \
+        .config("spark.memory.offHeap.size", "16g") \
         .getOrCreate()
         
         # .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
+        # If java.lang.OutOfMemoryError:
+        # .config("spark.memory.offHeap.enabled", "true") \
+        # .config("spark.memory.offHeap.size", "16g") \
+        # This will solve the problem with JVM heap size not being enough, but you need enough physical RAM.
             
     # Reduce shuffle size to avoid memory blow-up
     spark.conf.set("spark.sql.shuffle.partitions", 200)
@@ -468,9 +486,9 @@ def main():
     
     job_ads_per_region(df)
     
-    # text_columns = ["headline", "description.text"]
+    text_columns = ["headline", "description.text"]
     
-    # cluster_job_ads(df, text_cols=text_columns)
+    cluster_job_ads(df, text_cols=text_columns)
 
     spark.stop()
 

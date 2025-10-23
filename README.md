@@ -12,7 +12,11 @@ This project provides a Dockerized data pipeline to fetch, process, and analyze 
 
     - Calculate keywords frequencies
 
-    - Compute vacancies per municipality
+    - Compute vacancies per Swedish municipality and region
+
+    - Extract top required skills for job ads overall
+
+    - Analyze number of job ads released over time
 
     - Cluster job ads using Spark ML KMeans
 
@@ -90,7 +94,7 @@ Browse directories and uploaded JSON snapshots.
 | MongoDB: Missing configuration for: collection | Make sure `MONGO_COLLECTION` variable is set                                                |
 | HDFS: PATH_NOT_FOUND                           | Ensure the directory exists or let Spark create it using `_jvm.org.apache.hadoop.fs.FileSystem` |
 | Spark Mongo Connector: NoClassDefFoundError   | Ensure the jar is added in Dockerfile to `/opt/spark/jars/`                                  |
-| java.lang.OutOfMemoryError                                           | Increase driver/executor memory in SparkSession or Docker resources. Free up disk/memory if needed.
+| java.lang.OutOfMemoryError                                           | Increase driver/executor memory in SparkSession or Docker resources. Free up disk/memory if needed. You can also enable off-heap memory so that Unified Spark Memory = Off-Heap Memory + Unified Spark Memory [Link to source](https://medium.com/@omkarspatil2611/memory-management-in-apache-spark-3ae1f4db9d2b).
 
 
 ## Contact
