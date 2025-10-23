@@ -308,6 +308,41 @@ def calculate_vacancies_per_municipality(dataframe, collection="vacancies"):
 
     return result
 
+def vacancies_over_time(df, collection="vacancies_over_time"):
+    df = df.withColumn("date", F.to_date("publication_date"))
+    result = df.groupBy("date") \
+               .agg(count("*").alias("num_job_ads"),
+                    avg("number_of_vacancies").alias("avg_vacancies"))
+    result.write.format("mongodb").mode("overwrite") \
+          .option("uri", mongo_uri) \
+          .option("database", mongo_db) \
+          .option("collection", collection).save()
+    return result
+
+def top_skills(df, collection="top_skills"):
+    # Explode skills and remove nulls
+    skills_df = df.withColumn("skill", F.explode("must_have.skills")) \
+                  .filter(col("skill").isNotNull()) \
+                  .withColumn("skill_label", col("skill.label")) \
+                  .filter(col("skill_label").isNotNull())
+    
+    result = skills_df.groupBy("skill_label") \
+                      .agg(count("*").alias("count")) \
+                      .orderBy(F.desc("count")) \
+                      .limit(50)
+    
+    result.write.format("mongodb").mode("overwrite") \
+          .option("uri", mongo_uri).option("database", mongo_db).option("collection", collection).save()
+    return result
+
+def job_ads_per_region(df, collection="job_ads_per_region"):
+    result = df.groupBy("workplace_address.region") \
+               .agg(count("*").alias("num_jobs")) \
+               .orderBy(F.desc("num_jobs"))
+    result.write.format("mongodb").mode("overwrite") \
+          .option("uri", mongo_uri).option("database", mongo_db).option("collection", collection).save()
+    return result
+
 
 def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), vector_size=30, num_components=20, collection="global_clusters"):
     """
@@ -394,81 +429,6 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), vector_size=30, 
     return final_df_selected_cols
 
 
-# KMeans clustering on combined text fields
-# def cluster_job_ads(dataframe, text_cols, k_range=range(2, 9), vector_size=30, num_components=20, collection="global_clusters"):
-#     # Combine text columns
-#     combined_col = concat_ws(" ", *[col(c) for c in text_cols])
-#     df_combined = dataframe.withColumn("combined_text", combined_col)
-#     df_combined = df_combined.repartition(200)
-
-#     # Tokenizer and StopWordsRemover
-#     tokenizer = Tokenizer(inputCol="combined_text", outputCol="words")
-#     stopwords_remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
-
-#     # TF-IDF
-#     # hashingTF = HashingTF(inputCol="filtered_words", outputCol="rawFeatures", numFeatures=1000)
-#     # idf = IDF(inputCol="rawFeatures", outputCol="features")
-    
-#     # Word2Vec embeddings, drop very rare words with minCount
-#     word2vec = Word2Vec(vectorSize=vector_size,minCount=2, maxSentenceLength=30, inputCol="filtered_words", outputCol="features")
-
-#     # Pipeline
-#     pipeline = Pipeline(stages=[tokenizer, stopwords_remover, word2vec])
-#     # pipeline = Pipeline(stages=[tokenizer, stopwords_remover, hashingTF, idf])
-#     model = pipeline.fit(df_combined)
-#     df_features = model.transform(df_combined)
-
-#     # Normalize
-#     normalizer = Normalizer(inputCol="features", outputCol="normFeatures")
-#     df_norm = normalizer.transform(df_features)
-
-#     # PCA
-#     pca = PCA(k=num_components, inputCol="normFeatures", outputCol="pcaFeatures")
-#     pca_model = pca.fit(df_norm)
-#     df_pca = pca_model.transform(df_norm).cache()    # avoids recomputing PCA every time
-
-#     # Find best K using silhouette
-#     evaluator = ClusteringEvaluator(featuresCol="pcaFeatures", predictionCol="prediction", metricName="silhouette")
-#     best_k, best_score, best_model = 2, float("-inf"), None
-#     for k in k_range:
-#         kmeans = KMeans(featuresCol="pcaFeatures", predictionCol="prediction", k=k, seed=1)
-#         model = kmeans.fit(df_pca)
-#         preds = model.transform(df_pca)
-#         score = evaluator.evaluate(preds)
-#         if score > best_score:
-#             best_k, best_score, best_model = k, score, model
-
-#     # Save score as a column
-#     vector_to_array_udf = F.udf(lambda v: v.toArray().tolist(), ArrayType(DoubleType()))
-#     final_df = best_model.transform(df_pca) \
-#         .withColumnRenamed("prediction", "clusterNumber") \
-#         .withColumn("pcaFeaturesArray", vector_to_array_udf("pcaFeatures")) \
-#         .withColumn("silhouette_score", F.lit(best_score)) \
-#         .withColumn("best_k", F.lit(best_k)) \
-#         .drop("features") \
-#         .drop("normFeatures") \
-#         .drop("pcaFeatures")
-    
-#     df_features.unpersist()
-#     df_norm.unpersist()
-#     df_pca.unpersist()
-
-#     final_df = final_df.withColumn("job_title", col("occupation.label"))
-    
-#     final_df_selected_cols = final_df.select("id", "job_title", "clusterNumber", "silhouette_score")
-    
-#     # Save to MongoDB
-#     final_df_selected_cols.write  \
-#         .format("mongodb") \
-#         .mode("overwrite") \
-#         .option("uri", mongo_uri) \
-#         .option("database", mongo_db) \
-#         .option("collection", collection).save()     
-
-#     return final_df
-
-
-
 def main():
     print("Running the script")
 
@@ -496,14 +456,21 @@ def main():
     # Load JSON data from HDFS
     df = spark.read.json(data_path)
     
-    # print(df.schema)
-    # calculate_vacancies_per_municipality(df)
+    print(df.schema)
     
-    # calculate_keyword_frequencies(df)
+    calculate_vacancies_per_municipality(df)
     
-    text_columns = ["headline", "description.text"]
+    calculate_keyword_frequencies(df)
     
-    cluster_job_ads(df, text_cols=text_columns)
+    vacancies_over_time(df)
+    
+    top_skills(df)
+    
+    job_ads_per_region(df)
+    
+    # text_columns = ["headline", "description.text"]
+    
+    # cluster_job_ads(df, text_cols=text_columns)
 
     spark.stop()
 
