@@ -28,5 +28,11 @@ RUN sed -i 's/\r$//' /app/wait-for-hdfs.sh
 ENV PYSPARK_PYTHON=/usr/bin/python3
 ENV PYSPARK_DRIVER_PYTHON=/usr/bin/python3
 
+# Add MongoDB Spark Connector and Java Driver dependencies
+ADD https://repo1.maven.org/maven2/org/mongodb/spark/mongo-spark-connector_2.12/10.3.0/mongo-spark-connector_2.12-10.3.0.jar /opt/spark/jars/
+ADD https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-sync/4.11.1/mongodb-driver-sync-4.11.1.jar /opt/spark/jars/
+ADD https://repo1.maven.org/maven2/org/mongodb/bson/4.11.1/bson-4.11.1.jar /opt/spark/jars/
+ADD https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-core/4.11.1/mongodb-driver-core-4.11.1.jar /opt/spark/jars/
+
 # CMD ["/app/wait-for-hdfs.sh", "namenode", "8020", "/opt/spark/bin/spark-submit", "--master", "local[*]", "python_scripts/job_analysis.py"]
 CMD ["/opt/spark/bin/spark-submit", "--master", "local[*]", "python_scripts/job_analysis.py"]

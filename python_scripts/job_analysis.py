@@ -37,8 +37,11 @@ mongo_port=27017
 # MONGO_PASS = os.getenv("MONGO_PASS")
 # MONGO_HOST = os.getenv("MONGO_HOST", "mongodb")
 # MONGO_DB = os.getenv("MONGO_DB")
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
-HDFS_PATH = os.getenv("HDFS_PATH")
+# MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
+# HDFS_PATH = os.getenv("HDFS_PATH")
+
+MONGO_COLLECTION="TEST"
+
 
 # Construct Mongo URI
 mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}?authSource=admin"
@@ -115,7 +118,8 @@ def collect_data(spark):
     fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
     # hdfs_path = "hdfs://namenode:8020/user/hdfsuser/jobstream/job_ads.json"
     # subprocess.run(["hdfs", "dfs", "-put", "-f", "data/job_ads_line.json", hdfs_path], check=True)
-    df = spark.read.json("data/job_ads_line.json")
+    # df = spark.read.json("data/job_ads_line.json")
+    df = spark.read.json("file:///app/data/job_ads_line.json")    # read from local fs
     df.write.mode("overwrite").json(hdfs_path)  
     # print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
 
@@ -503,13 +507,15 @@ def main():
     spark = SparkSession.builder \
         .appName("JobAnalysisApp").master("local[*]") \
         .config("spark.mongodb.write.connection.uri", mongo_uri) \
+        .config("spark.mongodb.read.connection.uri", mongo_uri) \
         .config("spark.sql.caseSensitive", "true") \
         .config("spark.driver.memory", "16g") \
         .config("spark.executor.memory", "16g") \
         .config("spark.sql.files.maxPartitionBytes", "128MB") \
-        .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
         .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
         .getOrCreate()
+        
+        # .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
         
     data_path = collect_data(spark)
 
