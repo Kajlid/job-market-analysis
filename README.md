@@ -33,8 +33,6 @@ Make sure you have the following installed:
 - Python 3.10+ if running the scripts locally
     -  Pip packages used listed in requirements.txt
 
-For running the Python script
-
 
 ## Project Structure
 ```
