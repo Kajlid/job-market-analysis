@@ -1,68 +1,262 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.functions import col, avg, count, lit, concat_ws, lower, regexp_replace, trim, split
-from pyspark.ml.feature import PCA, Normalizer, Tokenizer, StopWordsRemover
-from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import ClusteringEvaluator
-from pyspark.ml import Pipeline
-from pyspark.sql.window import Window
-from pyspark.ml.feature import Tokenizer, HashingTF, IDF
+# from pyspark.ml.feature import PCA, Normalizer, Tokenizer, StopWordsRemover
+# from pyspark.ml.clustering import KMeans
+# from pyspark.ml.evaluation import ClusteringEvaluator
+# from pyspark.ml import Pipeline
+# from pyspark.ml.feature import Tokenizer, HashingTF, IDF
 from pyspark.sql.types import ArrayType, DoubleType, StringType
-import requests
-import getpass
-import os
-import json
-import subprocess
+from pyspark.sql.window import Window
 import datetime
+import json
+import time
+import requests
+import subprocess
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-MONGO_HOST = os.getenv("MONGO_HOST")
-MONGO_DB = os.getenv("MONGO_DB")
+# mongo_user = os.getenv("MONGO_USER")
+mongo_user = "test-user"
+mongo_pass = "test-password987654321"
+# MONGO_HOST="cluster1.4hsuyrb.mongodb.net"
+mongo_host="mongodb"
+mongo_db="jobmarket"
+mongo_port=27017
+# mongo_pass = os.getenv("MONGO_PASS")
+# mongo_db = os.getenv("MONGO_DB")
+# mongo_host = os.getenv("MONGO_HOST", "mongodb")
+# mongo_port = int(os.getenv("MONGO_PORT", 27017))
+
+# MONGO_USER = os.getenv("MONGO_USER")
+# MONGO_PASS = os.getenv("MONGO_PASS")
+# MONGO_HOST = os.getenv("MONGO_HOST", "mongodb")
+# MONGO_DB = os.getenv("MONGO_DB")
+# MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
+# HDFS_PATH = os.getenv("HDFS_PATH")
+
+MONGO_COLLECTION="TEST"
+
 
 # Construct Mongo URI
-mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
+mongo_uri = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}?authSource=admin"
+# mongo_uri = os.getenv("MONGO_URI")
 
-def collect_data():
-    # Configuration
-    API_URL = "https://jobstream.api.jobtechdev.se/snapshot"
-    HEADERS = {"accept": "application/json"}
-    LOCAL_DIR = "data"
-    LOCAL_FILE = os.path.join(LOCAL_DIR, "data.json")
+retry_count = 0
+while retry_count < 10:
+    try:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        client.server_info()  # force connection
+        print("MongoDB is ready")
+        break
+    except ServerSelectionTimeoutError:
+        retry_count += 1
+        print("Waiting for MongoDB to be ready...")
+        time.sleep(2)
+else:
+    raise RuntimeError("MongoDB not reachable after 20s")
 
-    # Get current UTC date
+db = client[mongo_db]
+print("MongoDB collections:", db.list_collection_names())      # check connectivity
+# mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
+
+def collect_data(spark):
+    import tempfile
+    import os
+
+    jobstream_url = "https://jobstream.api.jobtechdev.se/snapshot"
     today = datetime.datetime.now(datetime.timezone.utc)
-    date_path = f"yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}"
 
-    # HDFS paths
-    username = getpass.getuser()
-    hdfs_dir = f"/user/{username}/jobstream/snapshot/{date_path}/"
-    hdfs_file = hdfs_dir + "job_ads.json"
+    # HDFS directory and file
+    hdfs_dir = f"/user/hdfsuser/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    hdfs_path = hdfs_dir + "job_ads.json"
 
-    # Fetch data from API
-    response = requests.get(API_URL, headers=HEADERS)
-    print("Status code:", response.status_code)
-    data = response.json()
+    print(f"Fetching data from JobStream API...")
+    headers = {"accept": "application/json"}
+    params = {"limit": 100}
+    # response = requests.get(jobstream_url, params=params, headers=headers, timeout=10)
 
-    # Save data locally 
-    os.makedirs(LOCAL_DIR, exist_ok=True)
-    with open(LOCAL_FILE, "w") as f:
-        json.dump(data, f)
-    print(f"Saved {len(data)} records to {LOCAL_FILE}")
+    # if response.status_code != 200:
+    #     raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
 
-    # Store data in HDFS
-    subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
-    subprocess.run(["hdfs", "dfs", "-put", "-f", LOCAL_FILE, hdfs_file])
-    print(f"Snapshot stored in HDFS: {hdfs_file}")
+    # data = response.json()
+    # print(f"Fetched {len(data)} records")
+
+    # Write JSON to a temporary local file
+    # with tempfile.TemporaryDirectory() as tmpdir:
+    #     local_file = os.path.join(tmpdir, "job_ads.json")
+    #     with open(local_file, "w", encoding="utf-8") as f:
+    #         for record in data:
+    #             f.write(json.dumps(record) + "\n")  # line-delimited JSON
+
+        # print(f"Saved snapshot to temporary file: {local_file}")
+
+        # Ensure HDFS directory exists
+        # fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+        # fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+
+        # # Write local file to HDFS
+        # subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path], check=True)
+        # print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+        
+    # with open("data/data.json") as f:
+    #     data = json.load(f)
     
-    return "hdfs://localhost:9000" + hdfs_file
+    with open("data/data.json") as f:
+        data = json.load(f)  # list of dicts
 
-def calculate_vacancies_per_municipality(dataframe, collection="vacancies_per_municipality"):
+    with open("data/job_ads_line.json", "w") as f:
+        for record in data:
+            f.write(json.dumps(record) + "\n")
+    
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+    fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+    # hdfs_path = "hdfs://namenode:8020/user/hdfsuser/jobstream/job_ads.json"
+    # subprocess.run(["hdfs", "dfs", "-put", "-f", "data/job_ads_line.json", hdfs_path], check=True)
+    # df = spark.read.json("data/job_ads_line.json")
+    df = spark.read.json("file:///app/data/job_ads_line.json")    # read from local fs
+    df.write.mode("overwrite").json(hdfs_path)  
+    # print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+
+    # Read JSON from HDFS into Spark DataFrame
+    # df = spark.read.json(hdfs_path)
+    # print(f"Loaded DataFrame with {df.limit(5).count()} rows (preview) and {len(df.columns)} columns")
+    df_hdfs = spark.read.json(hdfs_path)
+    df_hdfs.show(5, truncate=False)
+
+    return hdfs_path
+
+
+""" def collect_data(spark):
+    jobstream_url = "https://jobstream.api.jobtechdev.se/snapshot"
+    today = datetime.datetime.now(datetime.timezone.utc)         # 2025-09-29
+    # print(f"{today.month:02d} {today.day:02d}")
+
+    hdfs_dir = f"/user/hdfsuser/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    # hdfs_dir = f"/user/{os.getlogin()}/jobstream/snapshot/yyyy={today.year}/mm={today.month:02d}/dd={today.day:02d}/"
+    # local_file = "/tmp/data.json"
+
+    hdfs_path = hdfs_dir + "job_ads.json"    # /data/jobstream/snapshot/yyyy=2025/mm=09/dd=29/job_ads.json
+    # print(hdfs_path)        
+    
+    print(f"Writing to HDFS path: {hdfs_path}")
+
+    headers = {"accept": "application/json"}
+    response = requests.get(jobstream_url, headers=headers)
+    print("Status code:", response.status_code)
+    
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch jobstream snapshot: {response.status_code}")
+
+    data = response.json()
+    print(f"Fetched {len(data)} records from JobStream")
+    
+    # df = spark.read.json(spark.sparkContext.parallelize([str(data)]))
+    rdd = spark.sparkContext.parallelize(data) 
+    df = spark.read.json(rdd)
+    # df = spark.read.json(spark.sparkContext.parallelize([json.dumps(data)]))
+    
+    # os.makedirs("/tmp", exist_ok=True)
+    # with open(local_file, "w") as f:
+    #     json.dump(data, f)       # Save locally first
+    # print(f"Saved {len(data)} records to {local_file}")
+
+    # with open("data/data.json", "w") as f:       # local version
+    #     json.dump(data, f)
+        
+    # print("Saved", len(data), "records to data.json")
+
+    # subprocess.run(["hdfs", "dfs", "-mkdir", "-p", hdfs_dir])
+
+    # subprocess.run(["hdfs", "dfs", "-put", "-f", local_file, hdfs_path])
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+    fs.mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+
+    # Write DataFrame to HDFS as JSON
+    df.coalesce(1).write.mode("overwrite").json(hdfs_dir)
+    print(f"Snapshot stored in HDFS folder: {hdfs_dir}")
+    
+    return f"hdfs://namenode:8020{hdfs_path}" """
+
+
+def calculate_keyword_frequencies(dataframe):
+
+     # List of text columns to combine
+    text_cols = [
+        "headline",
+        "description.conditions",
+        "description.text",
+        "occupation.label",
+        "must_have.skills.label",
+        "workplace_address.region"
+    ]
+
+    combined_col = concat_ws(" ", *[col(c) for c in text_cols])
+    combined_data = dataframe.withColumn("clean_text", lower(combined_col))
+
+    # Clean text (remove HTML, punctuation, etc.)
+    cleaned_data = (
+        combined_data
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "<[^>]*>", ""))
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "(?u)[^\\p{L}\\s]", " "))
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "\\s+", " "))
+        .withColumn("clean_text", trim(col("clean_text")))
+    )
+
+    # Tokenize and remove stop words
+    tokenizer = Tokenizer(inputCol="clean_text", outputCol="words")
+    df_tokens = tokenizer.transform(cleaned_data)
+
+    remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
+    english_stops = StopWordsRemover.loadDefaultStopWords("english")
+    swedish_stops = StopWordsRemover.loadDefaultStopWords("swedish")
+    additional_stops = ["samt", "hos", "arbeta", "söker", "både", "vill", "kommer", "arbete", "jobb", "tjänsten", "arbetar", "ansökan", "får", "se", "enligt"]
+    stops = english_stops + swedish_stops + additional_stops
+    df_noStops = remover.setStopWords(stops).transform(df_tokens)
+
+    # Find the most common words
+    # Count top words globally
+    global_keywords = (
+    df_noStops
+    .withColumn("top_words", F.explode(F.col("filtered_words")))
+    .groupBy("top_words")
+    .agg(F.count("*").alias("global_count"))  # 👈 renamed here
+    .orderBy(F.desc("global_count")))
+
+    # Keywords per kommun
+    munici_keywords = (
+    df_noStops
+    .filter(col("workplace_address.municipality").isNotNull())
+    .withColumn("top_words", F.explode(F.col("filtered_words")))
+    .groupBy("workplace_address.municipality", "top_words")
+    .agg(F.count("*").alias("municipality_count"))  # 👈 renamed here
+    .orderBy("workplace_address.municipality", F.desc("municipality_count")))
+
+    # Keywords per city
+    city_keywords = (
+    df_noStops
+    .filter(col("workplace_address.city").isNotNull())
+    .withColumn("top_words", F.explode(F.col("filtered_words")))
+    .groupBy("workplace_address.city", "top_words")
+    .agg(F.count("*").alias("city_count"))  # 👈 renamed here
+    .orderBy("workplace_address.city", F.desc("city_count")))
+    
+    munici_keywords.write \
+    .format("mongodb") \
+    .mode("overwrite") \
+    .option("uri", mongo_uri) \
+    .option("database", MONGO_DB) \
+    .option("collection", MONGO_COLLECTION).save() 
+
+    return global_keywords 
+
+
+def calculate_vacancies_per_municipality(dataframe):
     
     # Filter out null values
     df_filtered = dataframe.filter(
@@ -157,133 +351,82 @@ def calculate_vacancies_per_municipality(dataframe, collection="vacancies_per_mu
     .format("mongodb") \
     .mode("overwrite") \
     .option("uri", mongo_uri) \
-    .option("database", MONGO_DB) \
-    .option("collection", collection).save()      # write to collection named "vacancies"
+    .option("database", mongo_db) \
+    .option("collection", MONGO_COLLECTION).save()      # write to collection named "vacancies"
 
     return result
 
-def calculate_keyword_frequencies(dataframe, collection="keywords_final"):
-    
-    # Combine relevant text columns
-    text_cols = [
-        "headline",
-        "description.conditions",
-        "description.text",
-        "occupation.label",
-        "must_have.skills.label",
-        "workplace_address.region"
-    ]
 
-    combined_col = concat_ws(" ", *[col(c) for c in text_cols])
-    combined_data = dataframe.withColumn("clean_text", lower(combined_col))
+def cluster_job_ads_mongo_single_collection(dataframe, text_cols, k_range=range(2, 11), num_components=50):
+    # Combine text columns
+    combined_col = F.concat_ws(" ", *[F.col(c) for c in text_cols])
+    df_combined = dataframe.withColumn("combined_text", combined_col)
 
-    # Clean text (remove HTML, punctuation, etc.)
-    cleaned_data = (
-        combined_data
-        .withColumn("clean_text", regexp_replace(col("clean_text"), "<[^>]*>", ""))
-        .withColumn("clean_text", regexp_replace(col("clean_text"), "(?u)[^\\p{L}\\s]", " "))
-        .withColumn("clean_text", regexp_replace(col("clean_text"), "\\s+", " "))
-        .withColumn("clean_text", trim(col("clean_text")))
-    )
+    # Text processing pipeline (using TFIDF for encoding the text fields)
+    tokenizer = Tokenizer(inputCol="combined_text", outputCol="words")
+    hashingTF = HashingTF(inputCol="words", outputCol="rawFeatures", numFeatures=1000)
+    idf = IDF(inputCol="rawFeatures", outputCol="features")
+    pipeline = Pipeline(stages=[tokenizer, hashingTF, idf])
+    model = pipeline.fit(df_combined)
+    df_features = model.transform(df_combined)
 
-    # Tokenize and remove stop words
-    tokenizer = Tokenizer(inputCol="clean_text", outputCol="words")
-    df_tokens = tokenizer.transform(cleaned_data)
+    # Normalize
+    normalizer = Normalizer(inputCol="features", outputCol="normFeatures")
+    df_norm = normalizer.transform(df_features)
 
-    remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
-    english_stops = StopWordsRemover.loadDefaultStopWords("english")
-    swedish_stops = StopWordsRemover.loadDefaultStopWords("swedish")
-    additional_stops = ["samt", "hos", "arbeta", "söker", "både", "vill", "kommer",
-                        "arbete", "jobb", "tjänsten", "arbetar", "ansökan", "får", "se", "enligt"]
-    stops = english_stops + swedish_stops + additional_stops
-    df_noStops = remover.setStopWords(stops).transform(df_tokens)
+    # PCA, dimensionality reduction
+    pca = PCA(k=num_components, inputCol="normFeatures", outputCol="pcaFeatures")
+    pca_model = pca.fit(df_norm)
+    df_pca = pca_model.transform(df_norm)
 
-    # Extract municipality column and explode words
-    words_df = (
-        df_noStops
-        .filter(col("workplace_address.municipality").isNotNull())
-        .withColumn("municipality", col("workplace_address.municipality"))
-        .withColumn("word", F.explode(F.col("filtered_words")))
-    )
-    # Count word frequencies per municipality
-    word_counts = (
-        words_df.groupBy("municipality", "word")
-        .agg(F.count("*").alias("count"))
-    )
+    # Find best K using silhouette
+    evaluator = ClusteringEvaluator(featuresCol="pcaFeatures", predictionCol="prediction", metricName="silhouette")
+    best_k, best_score, best_model = 2, float("-inf"), None
 
-    # Rank and select top 10 per municipality
-    w = Window.partitionBy("municipality").orderBy(F.desc("count"))
-    top10 = (
-        word_counts.withColumn("rank", F.row_number().over(w))
-        .filter(F.col("rank") <= 10)
-    )
+    for k in k_range:
+        kmeans = KMeans(featuresCol="pcaFeatures", predictionCol="prediction", k=k, seed=1)
+        model_k = kmeans.fit(df_pca)
+        preds = model_k.transform(df_pca)
+        score = evaluator.evaluate(preds)
+        if score > best_score:
+            best_k, best_score, best_model = k, score, model_k
 
-    # Aggregate top 10 into an array of {word, count} objects
-    result = (
-        top10.groupBy("municipality")
-        .agg(F.collect_list(F.struct("word", "count")).alias("top_words"))
-    )
+    print(f"Best K: {best_k} with silhouette score: {best_score}")
 
-    # Concatenates top 10 keywords to a string without counts
-    result = result.withColumn(
-        "top_10_keywords",
-        F.concat_ws(", ", F.expr("transform(top_words, x -> x.word)"))
-    )
-    
-    # Compute global top 20 keywords
-    global_top = (
-    df_noStops
-    .withColumn("word", F.explode(F.col("filtered_words")))
-    .groupBy("word")
-    .agg(F.count("*").alias("count"))
-    .orderBy(F.desc("count"))
-    .limit(20)
-    )
-    
-    # Convert the global top 20 keywords into a DataFrame
-    global_top_array = (
-        global_top.agg(F.collect_list(F.struct("word", "count")).alias("top_20_global"))
-    )
-    
-    # Join this single-row DataFrame to all municipality rows
-    final_result = result.crossJoin(global_top_array)
-    
-    # Save to MongoDB Atlas
-    final_result.write \
-        .format("mongodb") \
+    # Transform with best model
+    final_df = best_model.transform(df_pca) \
+        .withColumnRenamed("prediction", "clusterNumber") \
+        .withColumn("job_title", F.col("occupation.label")) \
+        .drop("features", "normFeatures", "pcaFeatures", "rawFeatures", "words", "combined_text")
+
+    # Compute cluster-level summaries
+    # Jobs per cluster
+    jobs_per_cluster = final_df.groupBy("clusterNumber").count().withColumnRenamed("count", "jobs_in_cluster")
+
+    # Most common city per cluster
+    window = Window.partitionBy("clusterNumber").orderBy(F.desc("count"))
+    common_city = final_df.groupBy("clusterNumber", "city") \
+        .count() \
+        .withColumn("rank", F.row_number().over(window)) \
+        .filter(F.col("rank") == 1) \
+        .select("clusterNumber", F.col("city").alias("most_common_city"))
+
+    # Join summaries back to final_df
+    final_df_with_summary = final_df.join(jobs_per_cluster, on="clusterNumber", how="left") \
+                                    .join(common_city, on="clusterNumber", how="left") \
+                                    .select("id", F.col("occupation.label").alias("job_title"),  F.col("city"),
+                                            "clusterNumber", "most_common_city", "jobs_in_cluster")
+                                    
+
+    final_df_with_summary.write.format("mongodb") \
         .mode("overwrite") \
         .option("uri", mongo_uri) \
-        .option("database", MONGO_DB) \
-        .option("collection", collection) \
+        .option("database", mongo_db) \
+        .option("collection", MONGO_COLLECTION) \
         .save()
 
-    return final_result
 
-# Average number of vacancies per municipality:
-def calculate_avg_vacancies(dataframe, collection="vacancies"):
-    
-    # Filter out null values
-    df_filtered = dataframe.filter(
-        (col("workplace_address.municipality").isNotNull()) &
-        (col("number_of_vacancies").isNotNull())
-    )
-    result = df_filtered.groupBy(col("workplace_address.municipality").alias("municipality")) \
-        .agg(
-            avg("number_of_vacancies").alias("avg_number_of_vacancies"),
-            count(lit(1)).alias("num_vacancies_per_municipality")
-        ) \
-        .sort(col("num_vacancies_per_municipality").desc())
-
-    # Write to MongoDB
-    result.write \
-    .format("mongodb") \
-    .mode("overwrite") \
-    .option("uri", mongo_uri) \
-    .option("database", MONGO_DB) \
-    .option("collection", collection) \
-    .save()
-
-    return result
+    return final_df_with_summary
 
 
 # KMeans clustering on combined text fields
@@ -332,47 +475,68 @@ def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=5
     
     final_df_selected_cols = final_df.select("id", "job_title", "clusterNumber")
     
+
     # Save as a CSV file
     final_df_selected_cols.write  \
     .format("mongodb") \
     .mode("overwrite") \
     .option("uri", mongo_uri) \
-    .option("database", MONGO_DB) \
-    .option("collection", collection).save()     
+    .option("database", mongo_db) \
+    .option("collection", MONGO_COLLECTION).save()      # write to collection named "clusters"
     
+    # final_df.write.option("header", True).mode("overwrite").csv("output/job_clusters")
 
     return final_df
 
 
-
 def main():
+    print("Running the script")
 
     # Initialize Spark Session
     spark = SparkSession.builder \
-        .appName("JobAnalysisApp").master("local[*]").config("spark.mongodb.write.connection.uri", mongo_uri) \
-        .config("spark.sql.caseSensitive", "true") \
-        .config("spark.driver.memory", "8g") \
-        .config("spark.executor.memory", "8g") \
-        .config("spark.sql.files.maxPartitionBytes", "128MB") \
-        .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
+        .appName("JobAnalysisApp").master("local[*]") \
         .config("spark.mongodb.write.connection.uri", mongo_uri) \
+        .config("spark.mongodb.read.connection.uri", mongo_uri) \
+        .config("spark.sql.caseSensitive", "true") \
+        .config("spark.driver.memory", "16g") \
+        .config("spark.executor.memory", "16g") \
+        .config("spark.sql.files.maxPartitionBytes", "128MB") \
+        .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
         .getOrCreate()
+        
+        # .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0") \
+        
+    data_path = collect_data(spark)
 
-    # Write JSON data to HDFS
-    data_path = collect_data()
-    print(data_path)
-    
-    # Read data from HDFS
+    # Load JSON data from HDFS
+    # data_path = HDFS_PATH
     df = spark.read.json(data_path)
     
-    vacancies_per_municipality_df = calculate_vacancies_per_municipality
+    # print(df.schema)
+    calculate_vacancies_per_municipality(df)
     
-    keywords_df = calculate_keyword_frequencies(df)
+    # df.select("occupation.label").distinct().show(40, truncate=False)
+
+    # df.filter(trim(col("occupation.label")) == "grundutbildad") \
+    # .select("id", "headline", "occupation.label") \
+    # .show(1, truncate=False)
+
+    # cleanTextdf = calculate_keyword_frequencies(df)
+    # cleanTextdf.select("words", "filtered_words").show(1, truncate=False)
     
-    text_columns = ["headline", "description.text", "description.needs", "description.requirements"]
-    clustered_df = cluster_job_ads(df, text_columns)
+    # text_columns = ["headline", "description.text", "description.needs", "description.requirements"]
+    # clustered_df = cluster_job_ads(df, text_columns)
+    # # clustered_df = cluster_job_ads_mongo_single_collection(df, text_columns, k_range=range(2, 11), num_components=50)
+    # clustered_df.show(5, truncate=False)
+
+    # avg_vacancies_df = calculate_avg_vacancies(df)
+    # avg_vacancies_df.show(5, truncate=False)
+    
+    # calculate_keyword_frequencies(df)
 
     spark.stop()
 
 if __name__ == "__main__":
     main()
+
+
