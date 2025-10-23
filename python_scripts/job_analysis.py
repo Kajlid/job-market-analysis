@@ -195,30 +195,23 @@ def calculate_keyword_frequencies(dataframe):
         "must_have.skills.label",
         "workplace_address.region"
     ]
-    
-     # Combine text columns into one string column
+
     combined_col = concat_ws(" ", *[col(c) for c in text_cols])
     combined_data = dataframe.withColumn("clean_text", lower(combined_col))
-    
-    # Clean text (remove HTML tags, non-letter chars, extra spaces)
+
+    # Clean text (remove HTML, punctuation, etc.)
     cleaned_data = (
         combined_data
-        .withColumn("clean_text",
-            regexp_replace(col("clean_text"), "<[^>]*>", "")  # remove HTML tags
-        )
-        .withColumn("clean_text",
-            regexp_replace(col("clean_text"), "(?u)[^\\p{L}\\s]", " ")  # keep letters/spaces only
-        )
-        .withColumn("clean_text",
-            regexp_replace(col("clean_text"), "\\s+", " ")  # collapse multiple spaces
-        )
-        .withColumn("clean_text", trim(col("clean_text")))  # trim leading/trailing spaces
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "<[^>]*>", ""))
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "(?u)[^\\p{L}\\s]", " "))
+        .withColumn("clean_text", regexp_replace(col("clean_text"), "\\s+", " "))
+        .withColumn("clean_text", trim(col("clean_text")))
     )
-     # 3. Tokenize the text
+
+    # Tokenize and remove stop words
     tokenizer = Tokenizer(inputCol="clean_text", outputCol="words")
     df_tokens = tokenizer.transform(cleaned_data)
 
-    # 4. Remove stop words
     remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
     english_stops = StopWordsRemover.loadDefaultStopWords("english")
     swedish_stops = StopWordsRemover.loadDefaultStopWords("swedish")
@@ -361,10 +354,6 @@ def calculate_vacancies_per_municipality(dataframe):
     .option("database", mongo_db) \
     .option("collection", MONGO_COLLECTION).save()      # write to collection named "vacancies"
 
-
-    # Also write CSV
-    # result.write.option("header", True).mode("overwrite").csv("output/municipal_vacancies")
-
     return result
 
 
@@ -441,7 +430,7 @@ def cluster_job_ads_mongo_single_collection(dataframe, text_cols, k_range=range(
 
 
 # KMeans clustering on combined text fields
-def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=50):
+def cluster_job_ads(dataframe, text_cols, k_range=range(2, 11), num_components=50, collection="clusters"):
     # Combine text columns
     combined_col = concat_ws(" ", *[col(c) for c in text_cols])
     df_combined = dataframe.withColumn("combined_text", combined_col)
